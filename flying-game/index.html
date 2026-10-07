@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>夕焼けフライト</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap">
+<style>
+  /* 全画面の3D空。上端にHUD、中央に操縦説明カード。夕焼けの一色に固定したデザイン */
+  :root {
+    --dusk: #241c44;
+    --panel: rgba(30, 22, 58, 0.74);
+    --paper: #fff6ec;
+    --muted: #d9c8e0;
+    --sun: #ffb35c;
+    --rose: #ff6f86;
+    --line: rgba(255, 246, 236, 0.18);
+    --display: "Dela Gothic One", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    --body: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--dusk);
+    color: var(--paper);
+    font-family: var(--body);
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #game { position: fixed; inset: 0; touch-action: none; }
+  #c { display: block; width: 100%; height: 100%; }
+
+  .hud {
+    position: fixed; left: 0; right: 0; top: 0;
+    padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px 0;
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+    pointer-events: none;
+    text-shadow: 0 1px 6px rgba(36, 28, 68, 0.6);
+  }
+  .label {
+    display: block;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.14em;
+    color: var(--muted);
+  }
+  .score b {
+    display: block;
+    font-family: var(--display); font-weight: 400;
+    font-size: clamp(28px, 8vw, 40px); line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .combo { font-size: 13px; font-weight: 700; color: var(--sun); min-height: 1.2em; display: block; }
+  .fuel { width: min(42vw, 180px); text-align: right; }
+  .bar {
+    margin-top: 6px; height: 10px; border-radius: 6px;
+    background: rgba(255, 246, 236, 0.18); overflow: hidden;
+    border: 1px solid var(--line);
+  }
+  .bar i {
+    display: block; height: 100%; width: 100%;
+    background: linear-gradient(90deg, var(--rose), var(--sun));
+    transform-origin: left center;
+    transition: background 0.3s;
+  }
+  .bar.low i { background: var(--rose); animation: blink 0.5s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0.35; } }
+
+  #stick { position: fixed; left: 0; top: 0; pointer-events: none; }
+  #stick .base, #stick .knob {
+    position: absolute; border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+  #stick .base { width: 140px; height: 140px; border: 2px solid rgba(255, 246, 236, 0.35); background: rgba(255, 246, 236, 0.06); }
+  #stick .knob { width: 54px; height: 54px; background: rgba(255, 246, 236, 0.45); }
+
+  .flash { position: fixed; inset: 0; background: var(--rose); opacity: 0; pointer-events: none; transition: opacity 0.5s; }
+
+  .panel {
+    position: fixed; left: 50%;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 68px);
+    transform: translateX(-50%);
+    width: calc(100% - 32px); max-width: 360px;
+    padding: 28px 24px 24px;
+    background: var(--panel);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    display: grid; gap: 18px;
+    text-align: center;
+  }
+  .eyebrow { font-size: 11px; letter-spacing: 0.3em; color: var(--sun); font-weight: 700; }
+  .panel h1, .panel h2 {
+    margin: 0; font-family: var(--display); font-weight: 400;
+    line-height: 1.15; text-wrap: balance;
+  }
+  .panel h1 { font-size: clamp(34px, 10vw, 44px); }
+  .panel h2 { font-size: 30px; }
+  .howto { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; text-align: left; }
+  .howto li { display: grid; grid-template-columns: 3.4em 1fr; gap: 10px; align-items: baseline; font-size: 14px; line-height: 1.55; }
+  .howto b { font-size: 11px; letter-spacing: 0.1em; color: var(--sun); }
+  .result { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .result div { padding: 10px 6px; border-radius: 14px; background: rgba(255, 246, 236, 0.07); }
+  .result b { display: block; font-family: var(--display); font-weight: 400; font-size: 26px; font-variant-numeric: tabular-nums; }
+  .reason { margin: 0; color: var(--muted); font-size: 14px; }
+  .newbest { color: var(--sun); font-weight: 700; font-size: 13px; margin: 0; }
+
+  .go {
+    font: inherit; font-weight: 700; font-size: 17px; letter-spacing: 0.08em;
+    color: var(--dusk);
+    background: linear-gradient(180deg, #ffd27a, var(--sun));
+    border: 0; border-radius: 999px;
+    padding: 14px 20px; cursor: pointer;
+    box-shadow: 0 6px 20px rgba(255, 140, 80, 0.35);
+  }
+  .go:active { transform: translateY(1px); }
+  .go:focus-visible, .mute:focus-visible { outline: 3px solid var(--paper); outline-offset: 3px; }
+  .mute {
+    position: fixed; right: 16px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+    font: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
+    color: var(--paper); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 999px;
+    padding: 8px 14px; cursor: pointer;
+  }
+  .err { color: var(--muted); font-size: 14px; }
+  @media (prefers-reduced-motion: reduce) {
+    .bar.low i { animation: none; }
+    .flash { transition: none; }
+  }
+</style>
+
+<div id="game"><canvas id="c"></canvas></div>
+
+<div class="hud" id="hud" hidden>
+  <div class="score">
+    <span class="label">スコア</span>
+    <b id="score">0</b>
+    <span class="combo" id="combo"></span>
+  </div>
+  <div class="fuel">
+    <span class="label">燃料</span>
+    <div class="bar" id="fuelwrap"><i id="fuelbar"></i></div>
+  </div>
+</div>
+
+<div id="stick" hidden><span class="base"></span><span class="knob" id="knob"></span></div>
+<div class="flash" id="flash"></div>
+
+<section class="panel" id="titlePanel">
+  <div class="eyebrow">SUNSET FLIGHT</div>
+  <h1>夕焼けフライト</h1>
+  <ul class="howto">
+    <li><b>操縦</b><span>画面のどこでもドラッグ。指を動かした方向に飛びます。</span></li>
+    <li><b>燃料</b><span>光るリングをくぐると回復。続けてくぐるとコンボ。</span></li>
+    <li><b>注意</b><span>浮いている岩にぶつかるとおしまいです。</span></li>
+  </ul>
+  <button class="go" id="startBtn" type="button">飛ぶ</button>
+</section>
+
+<section class="panel" id="overPanel" hidden>
+  <div class="eyebrow">LANDED</div>
+  <h2 id="overTitle">おつかれさま</h2>
+  <p class="reason" id="overReason"></p>
+  <div class="result">
+    <div><span class="label">スコア</span><b id="finalScore">0</b></div>
+    <div><span class="label">ベスト</span><b id="bestScore">0</b></div>
+  </div>
+  <p class="newbest" id="newBest" hidden>ベスト更新</p>
+  <button class="go" id="retryBtn" type="button">もう一回</button>
+</section>
+
+<button class="mute" id="muteBtn" type="button">音 ON</button>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  if (!window.THREE) {
+    document.getElementById('titlePanel').innerHTML =
+      '<h2>読み込めませんでした</h2><p class="err">3D描画のライブラリが読み込めませんでした。通信状態を確認して、ページを開き直してください。</p>';
+    return;
+  }
+
+  const $ = (id) => document.getElementById(id);
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+
+  // ---------- renderer / scene ----------
+  const canvas = $('c');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const HORIZON = 0xf7a882;
+  scene.fog = new THREE.Fog(HORIZON, 160, 900);
+  const camera = new THREE.PerspectiveCamera(62, 1, 0.5, 2400);
+
+  scene.add(new THREE.HemisphereLight(0xffd9c4, 0x40336a, 0.95));
+  const sunLight = new THREE.DirectionalLight(0xffc28f, 1.05);
+  sunLight.position.set(-120, 90, -300);
+  scene.add(sunLight);
+
+  // sky dome
+  const sky = new THREE.Mesh(
+    new THREE.SphereGeometry(1800, 32, 16),
+    new THREE.ShaderMaterial({
+      side: THREE.BackSide, depthWrite: false, fog: false,
+      uniforms: {
+        top: { value: new THREE.Color(0x241c44) },
+        mid: { value: new THREE.Color(0xc0638c) },
+        low: { value: new THREE.Color(HORIZON) }
+      },
+      vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform vec3 top; uniform vec3 mid; uniform vec3 low; varying vec3 vP; void main(){ float h = vP.y; vec3 c = mix(low, mid, smoothstep(0.0, 0.22, h)); c = mix(c, top, smoothstep(0.22, 0.75, h)); gl_FragColor = vec4(c, 1.0); }'
+    })
+  );
+  scene.add(sky);
+
+  // sun + glow
+  const sun = new THREE.Group();
+  const sunDisc = new THREE.Mesh(new THREE.CircleGeometry(70, 40), new THREE.MeshBasicMaterial({ color: 0xfff0c8, fog: false }));
+  const sunGlow = new THREE.Mesh(new THREE.CircleGeometry(170, 40), new THREE.MeshBasicMaterial({ color: 0xffc27a, fog: false, transparent: true, opacity: 0.28, depthWrite: false }));
+  sunGlow.position.z = -1;
+  sun.add(sunGlow, sunDisc);
+  scene.add(sun);
+
+  // sea
+  const seaGeo = new THREE.PlaneGeometry(1800, 1800, 46, 46);
+  seaGeo.rotateX(-Math.PI / 2);
+  const sea = new THREE.Mesh(seaGeo, new THREE.MeshStandardMaterial({ color: 0x5a4c8c, flatShading: true, roughness: 0.85, metalness: 0 }));
+  sea.position.z = -600;
+  scene.add(sea);
+  const seaPos = seaGeo.attributes.position;
+
+  // ---------- plane ----------
+  function makePlane() {
+    const g = new THREE.Group();
+    const white = new THREE.MeshStandardMaterial({ color: 0xfff4e6, flatShading: true, roughness: 0.5 });
+    const red = new THREE.MeshStandardMaterial({ color: 0xe2475c, flatShading: true, roughness: 0.5 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x2c2552, flatShading: true, roughness: 0.3 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.3, 5, 8), white);
+    body.rotation.x = -Math.PI / 2;
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.1, 8), red);
+    nose.rotation.x = -Math.PI / 2; nose.position.z = -3.05;
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(7.4, 0.16, 1.5), white);
+    wing.position.set(0, -0.1, -0.6);
+    const tipL = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.18, 1.5), red);
+    tipL.position.set(-3.6, -0.1, -0.6);
+    const tipR = tipL.clone(); tipR.position.x = 3.6;
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.12, 0.8), white);
+    tail.position.set(0, 0.05, 2.2);
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.3, 1.0), red);
+    fin.position.set(0, 0.7, 2.25);
+    const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6), dark);
+    canopy.scale.set(0.9, 0.75, 1.6); canopy.position.set(0, 0.45, -1.0);
+    const prop = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.18, 0.06), dark);
+    prop.position.z = -3.65;
+    g.add(body, nose, wing, tipL, tipR, tail, fin, canopy, prop);
+    g.userData.prop = prop;
+    return g;
+  }
+  const plane = makePlane();
+  scene.add(plane);
+
+  // ---------- scenery ----------
+  const cloudMat = new THREE.MeshLambertMaterial({ color: 0xfff1ea, emissive: 0x6a4058, transparent: true, opacity: 0.9 });
+  const puffGeo = new THREE.IcosahedronGeometry(1, 2);
+  const clouds = [];
+  function placeCloud(c, z) {
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const high = Math.random() < 0.35;
+    c.position.set(high ? rand(-200, 200) : side * rand(70, 320), high ? rand(85, 140) : rand(15, 90), z);
+  }
+  for (let i = 0; i < 26; i++) {
+    const c = new THREE.Group();
+    const n = 4 + Math.floor(Math.random() * 4);
+    for (let j = 0; j < n; j++) {
+      const p = new THREE.Mesh(puffGeo, cloudMat);
+      const s = rand(6, 14);
+      p.scale.set(s * 1.3, s * 0.8, s);
+      p.position.set(rand(-16, 16), rand(-3, 4), rand(-8, 8));
+      c.add(p);
+    }
+    placeCloud(c, rand(-1500, 50));
+    clouds.push(c); scene.add(c);
+  }
+
+  const islandMat = new THREE.MeshStandardMaterial({ color: 0x4d7d6a, flatShading: true, roughness: 0.9 });
+  const sandMat = new THREE.MeshStandardMaterial({ color: 0xe9b98f, flatShading: true, roughness: 1 });
+  const islands = [];
+  function placeIsland(o, z) {
+    const r = o.userData.r;
+    o.position.set((Math.random() < 0.5 ? -1 : 1) * rand(r + 70, r + 380), 0, z);
+  }
+  for (let i = 0; i < 12; i++) {
+    const o = new THREE.Group();
+    const r = rand(18, 55), h = rand(18, 55);
+    const hill = new THREE.Mesh(new THREE.ConeGeometry(r, h, 7), islandMat);
+    hill.position.y = h / 2 - 1;
+    const sand = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.15, r * 1.25, 3, 9), sandMat);
+    o.add(sand, hill);
+    o.userData.r = r * 1.25;
+    placeIsland(o, rand(-1500, 50));
+    islands.push(o); scene.add(o);
+  }
+
+  // wind streaks
+  const WIND = 220;
+  const windGeo = new THREE.BufferGeometry();
+  const windArr = new Float32Array(WIND * 3);
+  for (let i = 0; i < WIND; i++) {
+    windArr[i * 3] = rand(-70, 70); windArr[i * 3 + 1] = rand(2, 75); windArr[i * 3 + 2] = rand(-320, 20);
+  }
+  windGeo.setAttribute('position', new THREE.BufferAttribute(windArr, 3));
+  const wind = new THREE.Points(windGeo, new THREE.PointsMaterial({ color: 0xfff6ec, size: 0.35, transparent: true, opacity: 0.55, depthWrite: false }));
+  scene.add(wind);
+
+  // ---------- rings & rocks ----------
+  const RING_R = 6.5;
+  const ringGeo = new THREE.TorusGeometry(RING_R, 0.7, 8, 28);
+  const rings = [], ringPool = [];
+  const rockGeo = new THREE.DodecahedronGeometry(1, 0);
+  const rockMat = new THREE.MeshStandardMaterial({ color: 0x5e4b72, flatShading: true, roughness: 0.95 });
+  const mossMat = new THREE.MeshStandardMaterial({ color: 0x5f9a72, flatShading: true, roughness: 0.95 });
+  const rocks = [], rockPool = [];
+  const SPAWN_Z = -560;
+
+  function spawnRing(path) {
+    const m = ringPool.pop() || new THREE.Mesh(ringGeo, new THREE.MeshStandardMaterial({ color: 0xffd271, emissive: 0xff8a3d, emissiveIntensity: 0.65, roughness: 0.35, metalness: 0.2, transparent: true }));
+    m.position.set(path.x, path.y, SPAWN_Z);
+    m.scale.setScalar(1); m.material.opacity = 1;
+    m.userData.hit = false; m.userData.fade = 0; m.userData.done = false;
+    rings.push(m); scene.add(m);
+  }
+  function spawnRock(avoid) {
+    let x, y, tries = 0;
+    do { x = rand(-46, 46); y = rand(10, 56); tries++; }
+    while (tries < 12 && Math.hypot(x - avoid.x, y - avoid.y) < 20);
+    let o = rockPool.pop();
+    if (!o) {
+      o = new THREE.Group();
+      const rock = new THREE.Mesh(rockGeo, rockMat);
+      const moss = new THREE.Mesh(rockGeo, mossMat);
+      moss.scale.set(0.92, 0.35, 0.92); moss.position.y = 0.45;
+      o.add(rock, moss);
+    }
+    const r = rand(3.5, 7.5);
+    o.scale.set(r, r * 0.8, r);
+    o.userData.r = r;
+    o.userData.spin = rand(-0.6, 0.6);
+    o.position.set(x, y, SPAWN_Z - rand(0, 60));
+    rocks.push(o); scene.add(o);
+  }
+  function clearObstacles() {
+    while (rings.length) { const m = rings.pop(); scene.remove(m); ringPool.push(m); }
+    while (rocks.length) { const o = rocks.pop(); scene.remove(o); rockPool.push(o); }
+  }
+
+  // ---------- sound ----------
+  let actx = null, muted = false;
+  try { muted = localStorage.getItem('yuyake-flight-muted') === '1'; } catch (e) {}
+  const muteBtn = $('muteBtn');
+  const renderMute = () => { muteBtn.textContent = muted ? '音 OFF' : '音 ON'; };
+  renderMute();
+  muteBtn.addEventListener('click', () => {
+    muted = !muted; renderMute();
+    try { localStorage.setItem('yuyake-flight-muted', muted ? '1' : '0'); } catch (e) {}
+  });
+  function ensureAudio() {
+    if (actx) return;
+    try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; }
+  }
+  function tone(freq, dur, type, vol) {
+    if (!actx || muted) return;
+    const t = actx.currentTime;
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(actx.destination);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+  const SCALE = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.66, 1318.5];
+  function chime(combo) {
+    const f = SCALE[Math.min(combo - 1, SCALE.length - 1)];
+    tone(f, 0.35, 'triangle', 0.18);
+    tone(f * 1.5, 0.25, 'sine', 0.06);
+  }
+  function crashSound() {
+    if (!actx || muted) return;
+    const t = actx.currentTime;
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.6);
+    g.gain.setValueAtTime(0.2, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+    o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 0.75);
+  }
+
+  // ---------- state ----------
+  const S = { state: 'title', t: 0, dist: 0, speed: 45, boost: 0, fuel: 100, score: 0, bonus: 0, combo: 0, nextRing: 0, nextRock: 0, crashT: 0, shake: 0, reason: '' };
+  const P = { x: 0, y: 26, vx: 0, vy: 0 };
+  const path = { x: 0, y: 28 };
+  const input = { sx: 0, sy: 0, touch: null, keys: {} };
+  let best = 0;
+  try { best = parseInt(localStorage.getItem('yuyake-flight-best') || '0', 10) || 0; } catch (e) {}
+
+  const hud = $('hud'), scoreEl = $('score'), comboEl = $('combo'), fuelBar = $('fuelbar'), fuelWrap = $('fuelwrap');
+  const stick = $('stick'), knob = $('knob'), flash = $('flash');
+
+  function startGame() {
+    ensureAudio();
+    if (actx && actx.state === 'suspended') actx.resume();
+    clearObstacles();
+    Object.assign(S, { state: 'play', t: 0, dist: 0, speed: 60, boost: 0, fuel: 100, score: 0, bonus: 0, combo: 0, nextRing: 40, nextRock: 600, crashT: 0, shake: 0 });
+    Object.assign(P, { x: 0, y: 26, vx: 0, vy: 0 });
+    Object.assign(path, { x: 0, y: 28 });
+    plane.rotation.set(0, 0, 0);
+    $('titlePanel').hidden = true; $('overPanel').hidden = true; hud.hidden = false;
+    comboEl.textContent = '';
+  }
+  function crash(reason) {
+    if (S.state !== 'play') return;
+    S.state = 'crash'; S.crashT = 1.1; S.reason = reason;
+    S.shake = reason === 'rock' ? 0.7 : 0;
+    if (reason === 'rock') {
+      crashSound();
+      flash.style.opacity = '0.45';
+      setTimeout(() => { flash.style.opacity = '0'; }, 120);
+    }
+    endTouch();
+  }
+  function showOver() {
+    S.state = 'over';
+    hud.hidden = true;
+    const final = S.score;
+    const isBest = final > best;
+    if (isBest) { best = final; try { localStorage.setItem('yuyake-flight-best', String(best)); } catch (e) {} }
+    $('overTitle').textContent = S.reason === 'rock' ? 'ゴツン' : '燃料切れ';
+    $('overReason').textContent = S.reason === 'rock' ? '浮いている岩にぶつかりました。' : 'リングをくぐって燃料を補給しましょう。';
+    $('finalScore').textContent = final.toLocaleString();
+    $('bestScore').textContent = best.toLocaleString();
+    $('newBest').hidden = !isBest || final === 0;
+    $('overPanel').hidden = false;
+  }
+  $('startBtn').addEventListener('click', startGame);
+  $('retryBtn').addEventListener('click', startGame);
+
+  // ---------- input ----------
+  const STICK_R = 70;
+  function endTouch() {
+    input.touch = null; input.sx = 0; input.sy = 0; stick.hidden = true;
+  }
+  window.addEventListener('pointerdown', (e) => {
+    if (S.state !== 'play' || e.target.closest('button')) return;
+    input.touch = { id: e.pointerId, ox: e.clientX, oy: e.clientY };
+    stick.style.transform = 'translate(' + e.clientX + 'px,' + e.clientY + 'px)';
+    knob.style.left = '0px'; knob.style.top = '0px';
+    stick.hidden = false;
+  });
+  window.addEventListener('pointermove', (e) => {
+    const t = input.touch;
+    if (!t || e.pointerId !== t.id) return;
+    let dx = e.clientX - t.ox, dy = e.clientY - t.oy;
+    const len = Math.hypot(dx, dy);
+    if (len > STICK_R) { dx *= STICK_R / len; dy *= STICK_R / len; }
+    input.sx = dx / STICK_R; input.sy = -dy / STICK_R;
+    knob.style.left = dx + 'px'; knob.style.top = dy + 'px';
+  });
+  const release = (e) => { if (input.touch && e.pointerId === input.touch.id) endTouch(); };
+  window.addEventListener('pointerup', release);
+  window.addEventListener('pointercancel', release);
+  window.addEventListener('keydown', (e) => {
+    input.keys[e.key] = true;
+    if ((e.key === 'Enter' || e.key === ' ') && (S.state === 'title' || S.state === 'over')) { e.preventDefault(); startGame(); }
+    if (e.key.startsWith('Arrow')) e.preventDefault();
+  });
+  window.addEventListener('keyup', (e) => { input.keys[e.key] = false; });
+  window.addEventListener('blur', () => { input.keys = {}; endTouch(); });
+
+  function steer() {
+    if (input.touch) return [input.sx, input.sy];
+    const k = input.keys;
+    const x = (k.ArrowRight || k.d || k.D ? 1 : 0) - (k.ArrowLeft || k.a || k.A ? 1 : 0);
+    const y = (k.ArrowUp || k.w || k.W ? 1 : 0) - (k.ArrowDown || k.s || k.S ? 1 : 0);
+    return [x, y];
+  }
+
+  // ---------- loop ----------
+  let baseFov = 60;
+  function resize() {
+    const w = window.innerWidth, h = window.innerHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    // 縦長画面では横の視野が狭くなりすぎないよう縦の画角を広げる
+    baseFov = camera.aspect < 1 ? Math.min(80, 2 * Math.atan(Math.tan(25 * Math.PI / 180) / camera.aspect) * 180 / Math.PI) : 60;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const camPos = new THREE.Vector3(0, 32, 18);
+  let last = performance.now(), T = 0, lookY = 14;
+
+  function update(dt) {
+    T += dt;
+    let speed;
+
+    if (S.state === 'play') {
+      S.t += dt;
+      S.boost = Math.max(0, S.boost - dt * 22);
+      S.speed = Math.min(140, 60 + S.t * 1.1);
+      speed = S.speed + S.boost;
+      S.dist += speed * dt;
+
+      const [sx, sy] = steer();
+      P.vx = lerp(P.vx, sx * 38, 1 - Math.exp(-dt * 5));
+      P.vy = lerp(P.vy, sy * 30, 1 - Math.exp(-dt * 5));
+      P.x = clamp(P.x + P.vx * dt, -50, 50);
+      P.y = clamp(P.y + P.vy * dt, 7, 62);
+
+      S.fuel -= dt * (4 + S.t * 0.035);
+      if (S.fuel <= 0) { S.fuel = 0; crash('fuel'); }
+
+      if (S.dist >= S.nextRing) {
+        path.x = clamp(path.x + rand(-24, 24), -42, 42);
+        path.y = clamp(path.y + rand(-15, 15), 12, 54);
+        spawnRing(path);
+        S.nextRing += 105;
+      }
+      if (S.dist >= S.nextRock) {
+        spawnRock(path);
+        if (Math.random() < Math.min(0.6, S.t / 90)) spawnRock(path);
+        S.nextRock += Math.max(70, 220 - S.t * 2.2) * rand(0.8, 1.2);
+      }
+      S.score = Math.floor(S.dist / 10) + S.bonus;
+    } else if (S.state === 'crash') {
+      S.crashT -= dt;
+      speed = Math.max(0, (S.speed + S.boost) * (S.crashT / 1.1));
+      P.vy -= dt * 30;
+      P.y = Math.max(3, P.y + P.vy * dt);
+      P.x += P.vx * dt;
+      if (S.crashT <= 0) showOver();
+    } else {
+      // title / over: gentle autopilot cruise
+      speed = 45;
+      P.vx = Math.cos(T * 0.6) * 10;
+      P.vy = Math.sin(T * 0.9) * 5;
+      P.x = Math.sin(T * 0.6) * 16;
+      P.y = 26 + Math.sin(T * 0.9) * 5;
+    }
+
+    const dz = speed * dt;
+
+    // plane pose
+    if (S.state === 'crash') {
+      plane.rotation.z += dt * (S.reason === 'rock' ? 9 : 2);
+      plane.rotation.x = lerp(plane.rotation.x, -0.6, dt * 2);
+    } else {
+      plane.rotation.z = lerp(plane.rotation.z, -P.vx * 0.022, 1 - Math.exp(-dt * 8));
+      plane.rotation.x = lerp(plane.rotation.x, P.vy * 0.018, 1 - Math.exp(-dt * 8));
+      plane.rotation.y = lerp(plane.rotation.y, -P.vx * 0.006, 1 - Math.exp(-dt * 8));
+    }
+    plane.position.set(P.x, P.y, 0);
+    plane.userData.prop.rotation.z += dt * (8 + speed * 0.4);
+
+    // rings
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const m = rings[i];
+      const prevZ = m.position.z;
+      m.position.z += dz;
+      m.rotation.z += dt * 0.8;
+      if (m.userData.hit) {
+        m.userData.fade += dt;
+        const f = m.userData.fade / 0.4;
+        m.scale.setScalar(1 + f * 0.8);
+        m.material.opacity = Math.max(0, 1 - f);
+        if (f >= 1) m.userData.done = true;
+      } else if (S.state === 'play' && prevZ < 0 && m.position.z >= 0) {
+        if (Math.hypot(m.position.x - P.x, m.position.y - P.y) < RING_R - 0.4) {
+          m.userData.hit = true;
+          S.combo += 1;
+          const mult = Math.min(S.combo, 5);
+          S.bonus += 20 * mult;
+          S.fuel = Math.min(100, S.fuel + 15);
+          S.boost = Math.min(40, S.boost + 18);
+          chime(S.combo);
+          comboEl.textContent = S.combo > 1 ? S.combo + ' コンボ ×' + mult : '';
+        } else {
+          S.combo = 0;
+          comboEl.textContent = '';
+        }
+      }
+      if (m.userData.done || m.position.z > 40) {
+        rings.splice(i, 1); scene.remove(m); ringPool.push(m);
+      }
+    }
+
+    // rocks
+    for (let i = rocks.length - 1; i >= 0; i--) {
+      const o = rocks[i];
+      o.position.z += dz;
+      o.rotation.y += dt * o.userData.spin;
+      if (S.state === 'play') {
+        const d = Math.hypot(o.position.x - P.x, (o.position.y - P.y) * 1.15, o.position.z);
+        if (d < o.userData.r * 0.85 + 1.4) crash('rock');
+      }
+      if (o.position.z > 40) { rocks.splice(i, 1); scene.remove(o); rockPool.push(o); }
+    }
+
+    // scenery
+    for (const c of clouds) { c.position.z += dz * 0.9; if (c.position.z > 80) placeCloud(c, c.position.z - 1600); }
+    for (const o of islands) { o.position.z += dz; if (o.position.z > 120) placeIsland(o, o.position.z - 1600); }
+    for (let i = 0; i < WIND; i++) {
+      const k = i * 3 + 2;
+      windArr[k] += dz * 1.3;
+      if (windArr[k] > 20) { windArr[k] -= 340; windArr[k - 2] = rand(-70, 70) + P.x * 0.5; windArr[k - 1] = rand(2, 75); }
+    }
+    windGeo.attributes.position.needsUpdate = true;
+
+    // sea waves (phase scrolls with distance traveled)
+    const off = S.state === 'title' || S.state === 'over' ? T * 45 : S.dist;
+    for (let i = 0; i < seaPos.count; i++) {
+      const x = seaPos.getX(i), z = seaPos.getZ(i);
+      seaPos.setY(i, Math.sin(x * 0.03 + T * 1.1) * 1.8 + Math.cos((z - off) * 0.04 + T * 0.7) * 1.8);
+    }
+    seaPos.needsUpdate = true;
+
+    // camera
+    const flying = S.state === 'play' || S.state === 'crash';
+    const target = new THREE.Vector3(P.x, P.y + 6, 20);
+    camPos.lerp(target, 1 - Math.exp(-dt * 4));
+    camera.position.copy(camPos);
+    if (S.shake > 0) {
+      S.shake = Math.max(0, S.shake - dt);
+      camera.position.x += rand(-1, 1) * S.shake * 2;
+      camera.position.y += rand(-1, 1) * S.shake * 2;
+    }
+    lookY = lerp(lookY, flying ? P.y + 1 : P.y - 24, 1 - Math.exp(-dt * 3));
+    camera.lookAt(camPos.x, lookY, -24);
+    const fov = baseFov + clamp((speed - 45) * 0.12, 0, 14);
+    if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = lerp(camera.fov, fov, 1 - Math.exp(-dt * 3)); camera.updateProjectionMatrix(); }
+
+    sky.position.copy(camera.position);
+    sun.position.set(camera.position.x - 260, camera.position.y + 40, camera.position.z - 1500);
+    sun.lookAt(camera.position);
+
+    // HUD
+    if (S.state === 'play') {
+      scoreEl.textContent = S.score.toLocaleString();
+      fuelBar.style.transform = 'scaleX(' + (S.fuel / 100).toFixed(3) + ')';
+      fuelWrap.classList.toggle('low', S.fuel < 25);
+    }
+  }
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    update(dt);
+    renderer.render(scene, camera);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</html>
