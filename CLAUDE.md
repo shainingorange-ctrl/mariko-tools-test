@@ -23,3 +23,4 @@
 | フォルダ | 名前 | アーティファクト |
 | --- | --- | --- |
 | `flying-game/` | 夕焼けフライト | https://claude.ai/artifact/CEwJsZArNo2aTEBw3oxxit |
+| `kaede-game/` | かえちゃんごう（かえちゃん専用） | https://claude.ai/artifact/C1PjAB57LtF76HNjGM1f5T |
