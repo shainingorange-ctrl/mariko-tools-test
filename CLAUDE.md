@@ -24,3 +24,4 @@
 | --- | --- | --- |
 | `flying-game/` | 夕焼けフライト | https://claude.ai/artifact/CEwJsZArNo2aTEBw3oxxit |
 | `kaede-game/` | かえちゃんごう（かえちゃん専用） | https://claude.ai/artifact/C1PjAB57LtF76HNjGM1f5T |
+| `world-rpg/` | テラルート（世界を旅する3D RPG、第一章ウユニ塩湖） | https://claude.ai/artifact/2zTM1NthEHyz8K7G2xfrp2 |
